@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -466,4 +466,165 @@ TEST_P(OpRotate, varshape_correct_output)
 
         EXPECT_EQ(goldVec, testVec);
     }
+}
+
+// clang-format off
+NVCV_TEST_SUITE_P(OpRotate_Negative, test::ValueList<nvcv::ImageFormat, nvcv::ImageFormat, NVCVInterpolationType>{
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8, NVCV_INTERP_LANCZOS},
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8p, NVCV_INTERP_NEAREST},
+    {nvcv::FMT_RGB8p, nvcv::FMT_RGB8p, NVCV_INTERP_NEAREST},
+    {nvcv::FMT_RGBf16, nvcv::FMT_RGBf16, NVCV_INTERP_NEAREST},
+});
+
+NVCV_TEST_SUITE_P(OpRotateVarshape_Negative, test::ValueList<nvcv::ImageFormat, nvcv::ImageFormat, int, int, NVCVInterpolationType, nvcv::DataType, nvcv::DataType>{
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8, 2, 5, NVCV_INTERP_LANCZOS, nvcv::TYPE_F64, nvcv::TYPE_F64},
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8, 6, 5, NVCV_INTERP_NEAREST, nvcv::TYPE_F64, nvcv::TYPE_F64},
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8, 2, -1, NVCV_INTERP_NEAREST, nvcv::TYPE_F64, nvcv::TYPE_F64},
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8p, 2, 5, NVCV_INTERP_NEAREST, nvcv::TYPE_F64, nvcv::TYPE_F64},
+    {nvcv::FMT_RGB8p, nvcv::FMT_RGB8p, 2, 5, NVCV_INTERP_NEAREST, nvcv::TYPE_F64, nvcv::TYPE_F64},
+    {nvcv::FMT_RGBf16, nvcv::FMT_RGBf16, 2, 5, NVCV_INTERP_NEAREST, nvcv::TYPE_F64, nvcv::TYPE_F64},
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8, 2, 5, NVCV_INTERP_NEAREST, nvcv::TYPE_F32, nvcv::TYPE_F64},
+    {nvcv::FMT_RGB8, nvcv::FMT_RGB8, 2, 5, NVCV_INTERP_NEAREST, nvcv::TYPE_F64, nvcv::TYPE_F32},
+});
+
+// clang-format on
+
+TEST_P(OpRotate_Negative, op)
+{
+    cudaStream_t stream;
+    EXPECT_EQ(cudaSuccess, cudaStreamCreate(&stream));
+
+    nvcv::ImageFormat     inputFmt      = GetParamValue<0>();
+    nvcv::ImageFormat     outputFmt     = GetParamValue<1>();
+    NVCVInterpolationType interpolation = GetParamValue<2>();
+
+    // Generate input
+    nvcv::Tensor imgSrc(2, {4, 4}, inputFmt);
+    // Generate test result
+    nvcv::Tensor imgDst(2, {4, 4}, outputFmt);
+
+    cvcuda::Rotate RotateOp(0);
+    double         angleDeg = 90;
+    double2        shift    = {-1, -1};
+    EXPECT_EQ(NVCV_ERROR_INVALID_ARGUMENT,
+              nvcv::ProtectCall([&] { RotateOp(stream, imgSrc, imgDst, angleDeg, shift, interpolation); }));
+
+    EXPECT_EQ(cudaSuccess, cudaStreamSynchronize(stream));
+    EXPECT_EQ(cudaSuccess, cudaStreamDestroy(stream));
+}
+
+TEST_P(OpRotateVarshape_Negative, op)
+{
+    cudaStream_t stream;
+    EXPECT_EQ(cudaSuccess, cudaStreamCreate(&stream));
+
+    nvcv::ImageFormat     inputFmt             = GetParamValue<0>();
+    nvcv::ImageFormat     outputFmt            = GetParamValue<1>();
+    const int             numberOfImages       = GetParamValue<2>();
+    const int             maxVarShapeBatchSize = GetParamValue<3>();
+    NVCVInterpolationType interpolation        = GetParamValue<4>();
+    nvcv::DataType        angleDataType        = GetParamValue<5>();
+    nvcv::DataType        shiftDataType        = GetParamValue<6>();
+
+    int srcWidthBase  = 4;
+    int srcHeightBase = 4;
+
+    // Create input and output
+    std::default_random_engine         randEng;
+    std::uniform_int_distribution<int> rndSrcWidth(srcWidthBase * 0.8, srcWidthBase * 1.1);
+    std::uniform_int_distribution<int> rndSrcHeight(srcHeightBase * 0.8, srcHeightBase * 1.1);
+
+    nvcv::Tensor angleDegTensor(nvcv::TensorShape({numberOfImages}, "N"), angleDataType);
+    nvcv::Tensor shiftTensor(nvcv::TensorShape({numberOfImages, 2}, nvcv::TENSOR_NW), shiftDataType);
+
+    std::vector<nvcv::Image> imgSrc, imgDst;
+
+    for (int i = 0; i < numberOfImages; ++i)
+    {
+        int tmpWidth  = i == 0 ? srcWidthBase : rndSrcWidth(randEng);
+        int tmpHeight = i == 0 ? srcHeightBase : rndSrcHeight(randEng);
+
+        imgSrc.emplace_back(nvcv::Size2D{tmpWidth, tmpHeight}, inputFmt);
+        imgDst.emplace_back(nvcv::Size2D{tmpWidth, tmpHeight}, outputFmt);
+    }
+
+    nvcv::ImageBatchVarShape batchSrc(numberOfImages);
+    batchSrc.pushBack(imgSrc.begin(), imgSrc.end());
+
+    nvcv::ImageBatchVarShape batchDst(numberOfImages);
+    batchDst.pushBack(imgDst.begin(), imgDst.end());
+
+    // Generate test result
+    cvcuda::Rotate rotateOp(maxVarShapeBatchSize);
+    EXPECT_EQ(
+        NVCV_ERROR_INVALID_ARGUMENT,
+        nvcv::ProtectCall([&] { rotateOp(stream, batchSrc, batchDst, angleDegTensor, shiftTensor, interpolation); }));
+
+    // Get test data back
+    EXPECT_EQ(cudaSuccess, cudaStreamSynchronize(stream));
+    EXPECT_EQ(cudaSuccess, cudaStreamDestroy(stream));
+}
+
+TEST(OpRotate_Negative, varshape_hasDifferentFormat)
+{
+    cudaStream_t stream;
+    EXPECT_EQ(cudaSuccess, cudaStreamCreate(&stream));
+
+    nvcv::ImageFormat     fmt            = nvcv::FMT_RGB8;
+    const int             numberOfImages = 5;
+    NVCVInterpolationType interpolation  = NVCV_INTERP_NEAREST;
+
+    int srcWidthBase  = 4;
+    int srcHeightBase = 4;
+
+    std::vector<std::tuple<nvcv::ImageFormat, nvcv::ImageFormat>> testSet{
+        {nvcv::FMT_RGBA8,             fmt},
+        {            fmt, nvcv::FMT_RGBA8}
+    };
+    for (auto testCase : testSet)
+    {
+        nvcv::ImageFormat inputFmtExtra  = std::get<0>(testCase);
+        nvcv::ImageFormat outputFmtExtra = std::get<1>(testCase);
+
+        // Create input and output
+        std::default_random_engine         randEng;
+        std::uniform_int_distribution<int> rndSrcWidth(srcWidthBase * 0.8, srcWidthBase * 1.1);
+        std::uniform_int_distribution<int> rndSrcHeight(srcHeightBase * 0.8, srcHeightBase * 1.1);
+
+        nvcv::Tensor angleDegTensor(nvcv::TensorShape({numberOfImages}, "N"), nvcv::TYPE_F64);
+        nvcv::Tensor shiftTensor(nvcv::TensorShape({numberOfImages, 2}, nvcv::TENSOR_NW), nvcv::TYPE_F64);
+
+        std::vector<nvcv::Image> imgSrc, imgDst;
+
+        for (int i = 0; i < numberOfImages - 1; ++i)
+        {
+            int tmpWidth  = i == 0 ? srcWidthBase : rndSrcWidth(randEng);
+            int tmpHeight = i == 0 ? srcHeightBase : rndSrcHeight(randEng);
+
+            imgSrc.emplace_back(nvcv::Size2D{tmpWidth, tmpHeight}, fmt);
+            imgDst.emplace_back(nvcv::Size2D{tmpWidth, tmpHeight}, fmt);
+        }
+        imgSrc.emplace_back(imgSrc[0].size(), inputFmtExtra);
+        imgDst.emplace_back(imgSrc.back().size(), outputFmtExtra);
+
+        nvcv::ImageBatchVarShape batchSrc(numberOfImages);
+        batchSrc.pushBack(imgSrc.begin(), imgSrc.end());
+
+        nvcv::ImageBatchVarShape batchDst(numberOfImages);
+        batchDst.pushBack(imgDst.begin(), imgDst.end());
+
+        // Generate test result
+        cvcuda::Rotate rotateOp(numberOfImages);
+        EXPECT_EQ(NVCV_ERROR_INVALID_ARGUMENT,
+                  nvcv::ProtectCall(
+                      [&] { rotateOp(stream, batchSrc, batchDst, angleDegTensor, shiftTensor, interpolation); }));
+    }
+
+    EXPECT_EQ(cudaSuccess, cudaStreamSynchronize(stream));
+    EXPECT_EQ(cudaSuccess, cudaStreamDestroy(stream));
+}
+
+TEST(OpRotate_Negative, create_null_handle)
+{
+    EXPECT_EQ(cvcudaRotateCreate(nullptr, 2), NVCV_ERROR_INVALID_ARGUMENT);
 }
