@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@
 #include "TLS.hpp"
 
 #include <nvcv/util/String.hpp>
+#include <stdio.h>
 
 #include <sstream>
 
@@ -158,6 +159,9 @@ std::pair<int, int> GetChromaSamples(NVCVChromaSubsampling css)
     case NVCV_CSS_411R:
         return {4, 1};
 
+    case NVCV_CSS_410R:
+        return {2, 1};
+
     case NVCV_CSS_422:
         return {2, 4};
 
@@ -166,6 +170,9 @@ std::pair<int, int> GetChromaSamples(NVCVChromaSubsampling css)
 
     case NVCV_CSS_411:
         return {1, 4};
+
+    case NVCV_CSS_410:
+        return {1, 2};
     }
 
     throw Exception(NVCV_ERROR_INVALID_ARGUMENT) << "Invalid chroma subsampling: " << css;
@@ -250,13 +257,11 @@ const char *GetName(NVCVColorSpec cspec)
     }
     catch (std::exception &e)
     {
-        strncpy(buffer, e.what(), bufSize - 1);
-        buffer[bufSize - 1] = '\0';
+        snprintf(buffer, bufSize, "%s", e.what());
     }
     catch (...)
     {
-        strncpy(buffer, "Unexpected error retrieving NVCVColorSpec string representation", bufSize - 1);
-        buffer[bufSize - 1] = '\0';
+        snprintf(buffer, bufSize, "Unexpected error retrieving NVCVColorSpec string representation");
     }
 
     return buffer;
@@ -464,6 +469,8 @@ const char *GetName(NVCVChromaSubsampling chromaSub)
             ENUM_CASE_CSS(4, 1, 1, );
             ENUM_CASE_CSS(4, 1, 1, R);
             ENUM_CASE_CSS(4, 2, 0, );
+            ENUM_CASE_CSS(4, 1, 0, );
+            ENUM_CASE_CSS(4, 1, 0, R);
 #undef ENUM_CASE_CSS
         }
 

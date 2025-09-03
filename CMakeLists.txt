@@ -23,7 +23,7 @@ endif()
 
 project(cvcuda
         LANGUAGES C CXX
-        VERSION 0.13.1
+        VERSION 0.15.0
         DESCRIPTION "CUDA-accelerated Computer Vision algorithms"
 )
 
@@ -36,7 +36,7 @@ endif()
 enable_language(CUDA)
 
 # Used when creating special builds
-set(PROJECT_VERSION_SUFFIX "-beta")
+set(PROJECT_VERSION_SUFFIX "")
 
 # if user didn't set install prefix,
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)

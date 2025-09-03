@@ -1,4 +1,4 @@
-/* Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+/* Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
  * SPDX-License-Identifier: Apache-2.0
@@ -90,8 +90,20 @@ ErrorCode FlipOrCopyVarShape::infer(const ImageBatchVarShapeDataStridedCuda &inp
                                     const ImageBatchVarShapeDataStridedCuda &output,
                                     const TensorDataStridedCuda &flipCode, cudaStream_t stream)
 {
+    if (!input.uniqueFormat())
+    {
+        LOG_ERROR("Images in the input batch must all have the same format");
+        return ErrorCode::INVALID_DATA_FORMAT;
+    }
+    if (!output.uniqueFormat())
+    {
+        LOG_ERROR("Images in the output batch must all have the same format");
+        return ErrorCode::INVALID_DATA_FORMAT;
+    }
+
     DataFormat inputFormat  = helpers::GetLegacyDataFormat(input);
     DataFormat outputFormat = helpers::GetLegacyDataFormat(output);
+
     if (inputFormat != outputFormat)
     {
         LOG_ERROR("Invalid DataFormat between input (" << inputFormat << ") and output (" << outputFormat << ")");
@@ -105,13 +117,15 @@ ErrorCode FlipOrCopyVarShape::infer(const ImageBatchVarShapeDataStridedCuda &inp
         return ErrorCode::INVALID_DATA_FORMAT;
     }
 
-    if (!input.uniqueFormat())
+    DataType dataType    = helpers::GetLegacyDataType(input.uniqueFormat());
+    DataType outDataType = helpers::GetLegacyDataType(output.uniqueFormat());
+
+    if (dataType != outDataType)
     {
-        LOG_ERROR("Images in the input batch must all have the same format");
-        return ErrorCode::INVALID_DATA_FORMAT;
+        LOG_ERROR("DataType of input and output must be equal, but got " << dataType << " and " << outDataType);
+        return ErrorCode::INVALID_DATA_TYPE;
     }
 
-    DataType dataType = helpers::GetLegacyDataType(input.uniqueFormat());
     if (!(dataType == kCV_8U || dataType == kCV_16U || dataType == kCV_16S || dataType == kCV_32S
           || dataType == kCV_32F))
     {
