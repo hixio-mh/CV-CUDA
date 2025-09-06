@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # To get all branches
+          fetch-depth: 0 # To get all branche
 
       - name: Check for Code of Conduct
         id: check_file
